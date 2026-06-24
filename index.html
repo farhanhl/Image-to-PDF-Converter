@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image to PDF Converter</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <main class="app">
+    <header class="app__header">
+      <h1>Image to PDF</h1>
+      <p>Gabungkan gambar menjadi satu PDF — dibuat karena dini minta wkwk.</p>
+    </header>
+
+    <!-- Zona 1 — Upload Area -->
+    <section class="card">
+      <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Drop zone untuk gambar">
+        <svg class="dropzone__icon" viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor"
+          stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="17 8 12 3 7 8"></polyline>
+          <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+        <p class="dropzone__text">Seret &amp; lepas gambar di sini</p>
+        <p class="dropzone__hint">atau</p>
+        <button type="button" id="pickBtn" class="btn btn--secondary">Pilih File</button>
+        <p class="dropzone__formats">JPG · PNG · WEBP · GIF · BMP</p>
+        <input type="file" id="fileInput" accept="image/*" multiple hidden>
+      </div>
+
+      <div class="upload-status">
+        <span id="fileCount" class="file-count">Belum ada gambar dipilih</span>
+        <button type="button" id="resetBtn" class="btn btn--ghost" hidden>Reset</button>
+      </div>
+
+      <div id="warnings" class="warnings" hidden></div>
+
+      <div id="thumbGrid" class="thumb-grid" aria-live="polite"></div>
+      <p id="thumbMore" class="thumb-more" hidden></p>
+    </section>
+
+    <!-- Zona 2 — Panel Pengaturan -->
+    <section class="card settings">
+      <div class="settings__col">
+        <h2>Layout Gambar</h2>
+
+        <label class="field">
+          <span class="field__label">Gambar per halaman</span>
+          <select id="imagesPerPage">
+            <option value="1" selected>1</option>
+            <option value="2">2</option>
+            <option value="4">4</option>
+            <option value="6">6</option>
+            <option value="9">9</option>
+            <option value="12">12</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span class="field__label">Margin antar gambar (mm)</span>
+          <input type="number" id="marginBetween" value="5" min="0" max="50" step="1">
+        </label>
+
+        <label class="field">
+          <span class="field__label">Margin ke tepi kertas (mm)</span>
+          <input type="number" id="marginEdge" value="10" min="0" max="50" step="1">
+        </label>
+      </div>
+
+      <div class="settings__col">
+        <h2>Kertas</h2>
+
+        <label class="field">
+          <span class="field__label">Ukuran kertas</span>
+          <select id="paperSize">
+            <option value="a4" selected>A4 (210 × 297 mm)</option>
+            <option value="a3">A3 (297 × 420 mm)</option>
+            <option value="letter">Letter (216 × 279 mm)</option>
+            <option value="legal">Legal (216 × 356 mm)</option>
+            <option value="a5">A5 (148 × 210 mm)</option>
+          </select>
+        </label>
+
+        <div class="field">
+          <span class="field__label">Orientasi</span>
+          <div class="toggle-group" role="radiogroup" aria-label="Orientasi">
+            <label class="toggle">
+              <input type="radio" name="orientation" value="portrait" checked>
+              <span>Portrait</span>
+            </label>
+            <label class="toggle">
+              <input type="radio" name="orientation" value="landscape">
+              <span>Landscape</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Zona 3 — Preview & Action -->
+    <section class="card action">
+      <button type="button" id="generateBtn" class="btn btn--primary btn--lg">Generate PDF</button>
+
+      <div id="progressWrap" class="progress" hidden>
+        <div class="progress__bar">
+          <div id="progressFill" class="progress__fill"></div>
+        </div>
+        <span id="progressText" class="progress__text">Memproses...</span>
+      </div>
+
+      <button type="button" id="downloadBtn" class="btn btn--success btn--lg" hidden>Download PDF</button>
+      <p id="actionError" class="action__error" hidden></p>
+    </section>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="app.js"></script>
+</body>
+
+</html>
