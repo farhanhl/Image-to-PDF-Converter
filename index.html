@@ -71,6 +71,21 @@
           <span class="field__label">Margin ke tepi kertas (mm)</span>
           <input type="number" id="marginEdge" value="10" min="0" max="50" step="1">
         </label>
+
+        <label class="field field--check">
+          <input type="checkbox" id="stretch">
+          <span class="field__label">Stretch (paksa penuhi sel, abaikan rasio)</span>
+        </label>
+
+        <label class="field field--check">
+          <input type="checkbox" id="useCover">
+          <span class="field__label">Gunakan halaman cover</span>
+        </label>
+
+        <label class="field" id="coverSelectWrap" hidden>
+          <span class="field__label">Pilih gambar cover</span>
+          <select id="coverSelect"></select>
+        </label>
       </div>
 
       <div class="settings__col">

@@ -50,6 +50,10 @@ const progressWrap = document.getElementById('progressWrap');
 const progressFill = document.getElementById('progressFill');
 const progressText = document.getElementById('progressText');
 const actionError  = document.getElementById('actionError');
+const stretchToggle  = document.getElementById('stretch');
+const useCover       = document.getElementById('useCover');
+const coverSelect    = document.getElementById('coverSelect');
+const coverSelectWrap = document.getElementById('coverSelectWrap');
 
 // ============================================================
 // Upload handling
@@ -90,6 +94,12 @@ document.addEventListener('drop', (e) => {
 
 resetBtn.addEventListener('click', resetState);
 
+useCover.addEventListener('change', () => {
+  coverSelectWrap.hidden = !useCover.checked;
+  highlightCover();
+});
+coverSelect.addEventListener('change', highlightCover);
+
 function addFiles(fileList) {
   const incoming = Array.from(fileList);
   const skipped = [];
@@ -106,6 +116,7 @@ function addFiles(fileList) {
   renderWarnings(skipped);
   renderFileCount();
   renderThumbnails();
+  populateCoverSelect();
   hideAction();
 }
 
@@ -118,7 +129,11 @@ function resetState() {
   warnings.innerHTML = '';
   thumbMore.hidden = true;
   resetBtn.hidden = true;
+  stretchToggle.checked = false;
+  useCover.checked = false;
+  coverSelectWrap.hidden = true;
   renderFileCount();
+  populateCoverSelect();
   hideAction();
   hideProgress();
 }
@@ -183,6 +198,38 @@ function escapeHtml(s) {
   return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// Isi ulang dropdown cover berdasarkan daftar gambar, mempertahankan pilihan jika masih valid.
+function populateCoverSelect() {
+  const prev = parseInt(coverSelect.value, 10);
+  coverSelect.innerHTML = '';
+
+  images.forEach((file, i) => {
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    const name = file.name.length > 40 ? file.name.slice(0, 37) + '…' : file.name;
+    opt.textContent = `${i + 1}. ${name}`;
+    coverSelect.appendChild(opt);
+  });
+
+  if (images.length === 0) {
+    // tidak ada gambar: matikan opsi cover
+    useCover.checked = false;
+    coverSelectWrap.hidden = true;
+  } else {
+    coverSelect.value = String(!isNaN(prev) && prev < images.length ? prev : 0);
+  }
+  highlightCover();
+}
+
+// Tandai thumbnail yang dipilih sebagai cover.
+function highlightCover() {
+  const active = useCover.checked && images.length > 0;
+  const idx = parseInt(coverSelect.value, 10);
+  thumbGrid.querySelectorAll('.thumb').forEach((el, i) => {
+    el.classList.toggle('thumb--cover', active && i === idx);
+  });
+}
+
 // ============================================================
 // Layout engine
 // ============================================================
@@ -221,6 +268,18 @@ function fitContain(imgW, imgH, cell) {
   const drawX = cell.x + (cell.w - drawW) / 2;
   const drawY = cell.y + (cell.h - drawH) / 2;
   return { drawX, drawY, drawW, drawH };
+}
+
+/**
+ * Stretch: gambar mengisi penuh sel (mengikuti margin), aspect ratio diabaikan.
+ */
+function fitStretch(imgW, imgH, cell) {
+  return { drawX: cell.x, drawY: cell.y, drawW: cell.w, drawH: cell.h };
+}
+
+/** Pilih mode fit sesuai toggle stretch. */
+function fitImage(imgW, imgH, cell, stretch) {
+  return stretch ? fitStretch(imgW, imgH, cell) : fitContain(imgW, imgH, cell);
 }
 
 // ============================================================
@@ -293,6 +352,7 @@ async function generatePDF() {
   const marginEdge    = clampNum(document.getElementById('marginEdge').value, 0, 50, 10);
   const paperKey      = document.getElementById('paperSize').value;
   const orientation   = document.querySelector('input[name="orientation"]:checked').value;
+  const stretch       = stretchToggle.checked;
 
   const paper = PAPER_SIZES[paperKey];
   const paperWidth  = orientation === 'landscape' ? paper.h : paper.w;
@@ -300,9 +360,21 @@ async function generatePDF() {
 
   const grid = calculateGrid(imagesPerPage, paperWidth, paperHeight, marginEdge, marginBetween);
 
+  // tentukan cover (jika aktif) dan urutan gambar grid (cover dikeluarkan agar tak dobel)
+  let coverFile = null;
+  let gridImages = images;
+  if (useCover.checked && images.length > 0) {
+    const coverIdx = Math.min(Math.max(parseInt(coverSelect.value, 10) || 0, 0), images.length - 1);
+    coverFile = images[coverIdx];
+    gridImages = images.filter((_, idx) => idx !== coverIdx);
+  }
+
+  const total = gridImages.length + (coverFile ? 1 : 0);
+  let processed = 0;
+
   // UI: lock
   setBusy(true);
-  showProgress();
+  showProgress(total);
   if (lastPdfBlobUrl) { URL.revokeObjectURL(lastPdfBlobUrl); lastPdfBlobUrl = null; }
   downloadBtn.hidden = true;
 
@@ -310,28 +382,51 @@ async function generatePDF() {
   const pdf = new jsPDF({ orientation, unit: 'mm', format: paperKey });
 
   try {
-    for (let i = 0; i < images.length; i++) {
+    // ---- Halaman cover (full page, 1 gambar penuh dengan margin tepi) ----
+    if (coverFile) {
+      try {
+        const coverData = await compressImage(coverFile);
+        const coverCell = {
+          x: marginEdge,
+          y: marginEdge,
+          w: paperWidth - marginEdge * 2,
+          h: paperHeight - marginEdge * 2,
+        };
+        const fit = fitImage(coverData.width, coverData.height, coverCell, stretch);
+        pdf.addImage(coverData.dataURL, 'JPEG', fit.drawX, fit.drawY, fit.drawW, fit.drawH);
+      } catch (err) {
+        console.warn(err); // cover rusak: lewati, halaman pertama lanjut ke grid
+      }
+      processed++;
+      updateProgress(processed, total);
+    }
+
+    // ---- Halaman grid ----
+    for (let i = 0; i < gridImages.length; i++) {
       const posInPage = i % imagesPerPage;
-      if (posInPage === 0 && i !== 0) pdf.addPage();
+      // tambah halaman baru kecuali ini gambar pertama DAN belum ada halaman cover
+      if (posInPage === 0 && (i !== 0 || coverFile)) pdf.addPage();
 
       const cell = grid.cells[posInPage];
 
       let imgData;
       try {
-        imgData = await compressImage(images[i]);
+        imgData = await compressImage(gridImages[i]);
       } catch (err) {
         console.warn(err);
-        updateProgress(i + 1, images.length);
+        processed++;
+        updateProgress(processed, total);
         continue; // skip gambar rusak
       }
 
-      const { drawX, drawY, drawW, drawH } = fitContain(imgData.width, imgData.height, cell);
+      const { drawX, drawY, drawW, drawH } = fitImage(imgData.width, imgData.height, cell, stretch);
       pdf.addImage(imgData.dataURL, 'JPEG', drawX, drawY, drawW, drawH);
 
-      updateProgress(i + 1, images.length);
+      processed++;
+      updateProgress(processed, total);
 
       // beri napas ke event loop agar UI tidak freeze
-      if ((i + 1) % BATCH_YIELD === 0) {
+      if (processed % BATCH_YIELD === 0) {
         await new Promise(r => setTimeout(r, 0));
       }
     }
@@ -339,7 +434,7 @@ async function generatePDF() {
     const blob = pdf.output('blob');
     lastPdfBlobUrl = URL.createObjectURL(blob);
     downloadBtn.hidden = false;
-    progressText.textContent = `Selesai — ${images.length} gambar diproses.`;
+    progressText.textContent = `Selesai — ${total} gambar diproses${coverFile ? ' (termasuk cover)' : ''}.`;
   } catch (err) {
     console.error(err);
     showError('Terjadi kesalahan saat membuat PDF: ' + err.message);
@@ -375,10 +470,10 @@ function setBusy(busy) {
   generateBtn.textContent = busy ? 'Memproses…' : 'Generate PDF';
 }
 
-function showProgress() {
+function showProgress(total) {
   progressWrap.hidden = false;
   progressFill.style.width = '0%';
-  progressText.textContent = 'Memproses 0 / ' + images.length + '...';
+  progressText.textContent = 'Memproses 0 / ' + total + '...';
 }
 function hideProgress() { progressWrap.hidden = true; }
 
